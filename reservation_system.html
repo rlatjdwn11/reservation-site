@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>학생회 예약 시스템</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+        .hidden {
+            display: none;
+        }
+        #calendar {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 5px;
+            width: 90%;
+            max-width: 600px;
+        }
+        #calendar div {
+            border: 1px solid #ccc;
+            text-align: center;
+            padding: 20px 0;
+            cursor: pointer;
+        }
+        #calendar div.gray {
+            background-color: #ccc;
+            pointer-events: none;
+        }
+        #calendar div.weekend {
+            background-color: #f2f2f2;
+            pointer-events: none;
+        }
+        #calendar div.header {
+            font-weight: bold;
+        }
+        #modal, #adminModal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #fff;
+            padding: 20px;
+            border: 1px solid #ccc;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            z-index: 100;
+        }
+        #modal.hidden, #adminModal.hidden {
+            display: none;
+        }
+        #overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 99;
+        }
+        #overlay.hidden {
+            display: none;
+        }
+        #navButtons {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="userSelection">
+        <h2>학생회 예약 시스템</h2>
+        <button onclick="accessAsStudent()">학생으로 예약</button>
+        <button onclick="accessAsAdmin()">운영자로 로그인</button>
+    </div>
+
+    <div id="loginPage" class="hidden">
+        <h2>운영자 로그인</h2>
+        <input type="password" id="adminPassword" placeholder="비밀번호 입력">
+        <button onclick="login()">로그인</button>
+        <p id="loginError" class="hidden" style="color: red;">비밀번호가 틀렸습니다.</p>
+    </div>
+
+    <div id="calendarPage" class="hidden">
+        <h2 id="monthYear"></h2>
+        <div id="calendar"></div>
+        <div id="navButtons">
+            <button onclick="navigateMonth('prev')">이전 달</button>
+            <button onclick="navigateMonth('next')">다음 달</button>
+        </div>
+    </div>
+
+    <div id="modal" class="hidden">
+        <h3 id="modalDate"></h3>
+        <input type="text" id="studentName" placeholder="이름 입력">
+        <input type="text" id="studentNumber" placeholder="학번 입력">
+        <input type="number" id="numberOfPeople" placeholder="인원 수">
+        <button onclick="makeReservation()">예약하기</button>
+        <button onclick="closeModal()">닫기</button>
+    </div>
+
+    <div id="overlay" class="hidden"></div>
+
+    <script>
+        const adminPassword = 'k9524142!'; // 운영자 비밀번호
+        const reservations = JSON.parse(localStorage.getItem('reservations')) || {};
+        let currentMonth = new Date().getMonth();
+        let currentYear = new Date().getFullYear();
+
+        const userSelection = document.getElementById('userSelection');
+        const loginPage = document.getElementById('loginPage');
+        const calendarPage = document.getElementById('calendarPage');
+        const modal = document.getElementById('modal');
+        const overlay = document.getElementById('overlay');
+        const calendar = document.getElementById('calendar');
+        const modalDate = document.getElementById('modalDate');
+
+        function accessAsStudent() {
+            userSelection.style.display = 'none';
+            calendarPage.style.display = 'block';
+            generateCalendar(currentMonth, currentYear);
+        }
+
+        function accessAsAdmin() {
+            userSelection.style.display = 'none';
+            loginPage.style.display = 'block';
+        }
+
+        function login() {
+            const password = document.getElementById('adminPassword').value;
+            if (password === adminPassword) {
+                loginPage.style.display = 'none';
+                calendarPage.style.display = 'block';
+                generateCalendar(currentMonth, currentYear);
+            } else {
+                document.getElementById('loginError').style.display = 'block';
+            }
+        }
+
+        function generateCalendar(month, year) {
+            calendar.innerHTML = '';
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+            const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
+            weekDays.forEach(day => {
+                const header = document.createElement('div');
+                header.textContent = day;
+                header.className = 'header';
+                calendar.appendChild(header);
+            });
+
+            for (let i = 0; i < firstDay; i++) {
+                const emptyCell = document.createElement('div');
+                calendar.appendChild(emptyCell);
+            }
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const cell = document.createElement('div');
+                cell.textContent = day;
+
+                const dateKey = `${year}-${month + 1}-${day}`;
+                if (reservations[dateKey] || new Date(year, month, day).getDay() % 6 === 0) {
+                    cell.className = 'gray';
+                } else {
+                    cell.onclick = () => openModal(dateKey, day);
+                }
+
+                calendar.appendChild(cell);
+            }
+
+            document.getElementById('monthYear').textContent = `${year}년 ${month + 1}월`;
+        }
+
+        function navigateMonth(direction) {
+            if (direction === 'prev') {
+                currentMonth--;
+                if (currentMonth < 0) {
+                    currentMonth = 11;
+                    currentYear--;
+                }
+            } else {
+                currentMonth++;
+                if (currentMonth > 11) {
+                    currentMonth = 0;
+                    currentYear++;
+                }
+            }
+            generateCalendar(currentMonth, currentYear);
+        }
+
+        function openModal(dateKey, day) {
+            modalDate.textContent = `${currentYear}년 ${currentMonth + 1}월 ${day}일`;
+            modal.dataset.dateKey = dateKey;
+            modal.classList.remove('hidden');
+            overlay.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            modal.classList.add('hidden');
+            overlay.classList.add('hidden');
+        }
+
+        function makeReservation() {
+            const dateKey = modal.dataset.dateKey;
+            const studentName = document.getElementById('studentName').value;
+            const studentNumber = document.getElementById('studentNumber').value;
+            const numberOfPeople = document.getElementById('numberOfPeople').value;
+
+            if (!reservations[dateKey]) {
+                reservations[dateKey] = [];
+            }
+
+            reservations[dateKey].push({
+                name: studentName,
+                studentNumber: studentNumber,
+                numberOfPeople: numberOfPeople
+            });
+
+            localStorage.setItem('reservations', JSON.stringify(reservations));
+            closeModal();
+            generateCalendar(currentMonth, currentYear);
+        }
+    </script>
+</body>
+</html>
